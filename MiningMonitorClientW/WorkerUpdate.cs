@@ -57,7 +57,7 @@ namespace MiningMonitorClientW
               string JSON = JsonConvert.SerializeObject(this);
               Console.WriteLine(JSON);
               //send to website
-              //string httpBack = HttpPutRequest("JsonToWebsite");
+              string httpBack = HttpPutRequest(JSON);
           };
          timer.Start();
         }
@@ -99,7 +99,7 @@ namespace MiningMonitorClientW
         static string HttpPutRequest(string Json)
         {
             var httpWebRequest = (HttpWebRequest)WebRequest.Create("https://miningmonitor.herokuapp.com/workers/update");
-            httpWebRequest.ContentType = "text/json";
+            httpWebRequest.ContentType = "application/json";
             httpWebRequest.Method = "PUT";
             using (var streamWriter = new StreamWriter(httpWebRequest.GetRequestStream()))
             {

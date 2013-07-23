@@ -23,7 +23,7 @@ namespace MiningMonitorClientW
         {
             if (textBox1.Text.Trim().Length != 0 && textBox2.Text.Trim().Length != 0 && !running)
             {
-                string user_worker = textBox2.Text.Trim().ToLower() + textBox1.Text.Trim().ToLower();
+                string user_worker = textBox2.Text.Trim().ToLower() + ":" + textBox1.Text.Trim().ToLower();
                 WorkerUpdate workerUpdate = new WorkerUpdate(); ;
                 workerUpdate.update(user_worker);
                 this.button1.Text = "Monitoring";
