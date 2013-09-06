@@ -33,8 +33,8 @@ namespace MiningMonitorClientW
             }
             else
             {
-                textBox1.Text = "Enter your user name from the website here please";
-                textBox2.Text = "Enter the worker name from the website here please";
+                textBox1.Text = "Enter the worker name from the website here please";
+                textBox2.Text = "Enter your username from the website here please";
             }
         }
     }

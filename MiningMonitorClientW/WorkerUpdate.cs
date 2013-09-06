@@ -8,56 +8,60 @@ using System.Net.Sockets;
 using Newtonsoft.Json.Utilities;
 using Newtonsoft.Json;
 using System.IO;
+using System.Globalization;
 
 namespace MiningMonitorClientW
 {
     class WorkerUpdate
     {
-        public string worker_user_name { get; set; }
-        public string hashrate { get; set; }
-        public string accepted { get; set; }
-        public string rejected { get; set; }
-        public string hw_errors { get; set; }
-        public string num_gpu { get; set; }
-        public string[] gpus { get; set; }
+        public string wun { get; set; }
+        public int a { get; set; }
+        public int r { get; set; }
+        public int he { get; set; }
+        public double[] gs { get; set; }
 
         public void update(string user_worker)
         {    
-          System.Timers.Timer timer = new System.Timers.Timer(45000);
+
+          System.Timers.Timer timer = new System.Timers.Timer(300000);
           timer.Elapsed += (sender, e) =>
           {
-              //query the miner for summary and gpucount information
-              String SummaryQuery = QueryMiner("summary");
-              String gpuNum = FindKey(QueryMiner("gpucount"), "Count");
-              //String PoolQuery = QueryMiner("pools");
-              int numgpus = Convert.ToInt32(gpuNum);
-              //Array of strings to hold each gpu query 
-              String[] gpuQueries = new String[numgpus];
-              //add the GPU queries into the array
-              for (int i = 0; i < numgpus; i++)
+              try
               {
-                  gpuQueries[i] = QueryMiner("gpu|" + i);
+                  //query the miner for summary and gpucount information
+                  String SummaryQuery = QueryMiner("summary");
+                  String gpuNum = FindKey(QueryMiner("gpucount"), "Count");
+                  //String PoolQuery = QueryMiner("pools");
+                  int numgpus = Convert.ToInt32(gpuNum);
+                  //Array of strings to hold each gpu query 
+                  String[] gpuQueries = new String[numgpus];
+                  //add the GPU queries into the array
+                  for (int i = 0; i < numgpus; i++)
+                      gpuQueries[i] = QueryMiner("gpu|" + i);
+
+                  //now add information specific to each gpu to a list
+                  List<double> gpuList = new List<double>();
+                  CultureInfo US = new CultureInfo("en-US");
+                  for (int i = 0; i < gpuQueries.Length; i++)
+                  {
+                      gpuList.Add(Convert.ToDouble(FindKey(gpuQueries[i], "Temperature"), US));
+                      gpuList.Add(Convert.ToDouble(FindKey(gpuQueries[i], "MHS 5s"), US));
+                  }
+                  //set all the values that we have gotten from the queries
+                  this.wun = user_worker;
+                  this.a = Convert.ToInt32(FindKey(SummaryQuery, "Accepted"), US);
+                  this.r = Convert.ToInt32(FindKey(SummaryQuery, "Rejected"), US);
+                  this.he = Convert.ToInt32(FindKey(SummaryQuery, "Hardware Errors"), US);
+                  this.gs = gpuList.ToArray();
+                  //create JSON from the workerUpdate object
+                  string JSON = JsonConvert.SerializeObject(this);
+                  //send to website
+                  HttpPutRequest(JSON);
               }
-              //now add information specific to each gpu to a list
-              List<string> gpuList = new List<string>();
-              for (int i = 0; i + 1 <= gpuQueries.Length; i++)
+              catch (Exception we)
               {
-                  gpuList.Add(FindKey(gpuQueries[i], "Temperature"));
-                  gpuList.Add(FindKey(gpuQueries[i], "MHS 5s"));
+                  Logger("Exception: " + we.ToString());
               }
-              //set all the values that we have gotten from the queries
-              this.worker_user_name = user_worker;
-              this.hashrate = FindKey(SummaryQuery, "MHS av");
-              this.accepted = FindKey(SummaryQuery, "Accepted");
-              this.rejected = FindKey(SummaryQuery, "Rejected");
-              this.hw_errors = FindKey(SummaryQuery, "Hardware Errors");
-              this.num_gpu = gpuNum;
-              this.gpus = gpuList.ToArray();
-              //create JSON from the workerUpdate object
-              string JSON = JsonConvert.SerializeObject(this);
-              Console.WriteLine(JSON);
-              //send to website
-              string httpBack = HttpPutRequest(JSON);
           };
          timer.Start();
         }
@@ -67,13 +71,11 @@ namespace MiningMonitorClientW
             try
             {
                 //code for gettting current machines IP Use this code if client is running on the miner
-                //IPAddress ipAddr = IPAddress.Parse("127.0.0.1");
-                IPAddress ipAddr = IPAddress.Parse("198.244.100.254");
+                IPAddress ipAddr = IPAddress.Parse("127.0.0.1");            
                 IPEndPoint ipEndPoint = new IPEndPoint(ipAddr, 4028);
 
                 Socket sender = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
                 sender.Connect(ipEndPoint);
-                Console.WriteLine("Socket connected to {0}", sender.RemoteEndPoint.ToString());
 
                 string SummaryMessage = command;
                 byte[] msg = Encoding.ASCII.GetBytes(SummaryMessage);
@@ -92,28 +94,54 @@ namespace MiningMonitorClientW
             }
             catch (Exception ex)
             {
-                Console.WriteLine("Exception: {0}", ex.ToString());
+                Logger("Exception: " + ex.ToString());
                 return ex.ToString();
             }
         }
-        static string HttpPutRequest(string Json)
+
+        private static void Logger(String lines)
+        {        
+            // Write the string to a file.append mode is enabled so that the log
+            // lines get appended to  test.txt than wiping content and writing the log
+
+            System.IO.StreamWriter file = new System.IO.StreamWriter("C:/Users/LitenessEJW/Documents/clientLogs.txt", true);
+            file.WriteLine(lines);
+
+            file.Close();
+        }
+        static void HttpPutRequest(string Json)
         {
-            var httpWebRequest = (HttpWebRequest)WebRequest.Create("https://miningmonitor.herokuapp.com/workers/update");
-            httpWebRequest.ContentType = "application/json";
-            httpWebRequest.Method = "PUT";
-            using (var streamWriter = new StreamWriter(httpWebRequest.GetRequestStream()))
+            Logger("Sending JSON: " + Json);
+            try
             {
-                streamWriter.Write(Json);
-                streamWriter.Flush(); 
-                streamWriter.Close();
-                var httpResponse = (HttpWebResponse)httpWebRequest.GetResponse();
-                using (var streamReader = new StreamReader(httpWebRequest.GetRequestStream()))
-                {
-                    string results = streamReader.ReadToEnd();
-                    return results;
+                HttpWebRequest httpWebRequest = (HttpWebRequest)WebRequest.Create(new Uri("https://miningmonitor.herokuapp.com/workers/update"));
+                Logger("test httpWeb");
+                httpWebRequest.ContentType = "application/json";
+                httpWebRequest.Method = "PUT";
+                using (StreamWriter streamWriter = new StreamWriter(httpWebRequest.GetRequestStream()))
+                 {
+                    Logger("To URL: " + httpWebRequest.Address.ToString());
+                    streamWriter.WriteLine(Json);
+                    streamWriter.Flush();
+                    streamWriter.Close();
+                    try
+                    {
+                        HttpWebResponse httpResponse = (HttpWebResponse)httpWebRequest.GetResponse();
+                        string wRespStatusCode = httpResponse.StatusCode.ToString();
+                        Logger("Website return code: " + wRespStatusCode);
+                    }
+                    catch (WebException we)
+                    {
+                        string wRespStatusCode = ((HttpWebResponse)we.Response).StatusCode.ToString();
+                        Logger(" Exception and Website return code: " + wRespStatusCode);
+                    }
                 }
             }
-
+            catch (WebException we2)
+            {
+                string GetRequestStreamExp = ((HttpWebResponse)we2.Response).StatusCode.ToString();
+                Logger(" Exception trying to setup http WebRequest.GetRequestStream " + GetRequestStreamExp);
+            }
         }
         //Function to parse the string returns from the miner modified slightly from cgminer java api example
         static string FindKey(String result, string key)
