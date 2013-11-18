@@ -20,24 +20,20 @@ namespace MiningMonitorClientW
         public int he { get; set; }
         public double[] gs { get; set; }
 
-        public void update(string user_worker)
+        public void update(string user_worker, bool logging)
         {    
-
-          System.Timers.Timer timer = new System.Timers.Timer(300000);
-          timer.Elapsed += (sender, e) =>
-          {
-              try
-              {
                   //query the miner for summary and gpucount information
-                  String SummaryQuery = QueryMiner("summary");
-                  String gpuNum = FindKey(QueryMiner("gpucount"), "Count");
+                  String SummaryQuery = QueryMiner("summary", logging);
+                  if(logging)
+                    Logger("Summary Query: \n" + SummaryQuery); 
+                  String gpuNum = FindKey(QueryMiner("gpucount", logging), "Count");
                   //String PoolQuery = QueryMiner("pools");
                   int numgpus = Convert.ToInt32(gpuNum);
                   //Array of strings to hold each gpu query 
                   String[] gpuQueries = new String[numgpus];
                   //add the GPU queries into the array
                   for (int i = 0; i < numgpus; i++)
-                      gpuQueries[i] = QueryMiner("gpu|" + i);
+                      gpuQueries[i] = QueryMiner("gpu|" + i, logging);
 
                   //now add information specific to each gpu to a list
                   List<double> gpuList = new List<double>();
@@ -56,16 +52,9 @@ namespace MiningMonitorClientW
                   //create JSON from the workerUpdate object
                   string JSON = JsonConvert.SerializeObject(this);
                   //send to website
-                  HttpPutRequest(JSON);
-              }
-              catch (Exception we)
-              {
-                  Logger("Exception: " + we.ToString());
-              }
-          };
-         timer.Start();
+                  HttpPutRequest(JSON, logging);
         }
-        static string QueryMiner(string command)
+        static string QueryMiner(string command, bool logging)
         {
             byte[] bytes = new byte[1024];
             try
@@ -94,7 +83,10 @@ namespace MiningMonitorClientW
             }
             catch (Exception ex)
             {
-                Logger("Exception: " + ex.ToString());
+                if (logging)
+                {
+                    Logger("Exception: " + ex.ToString());
+                }
                 return ex.ToString();
             }
         }
@@ -109,18 +101,23 @@ namespace MiningMonitorClientW
 
             file.Close();
         }
-        static void HttpPutRequest(string Json)
+        static void HttpPutRequest(string Json, bool logging)
         {
-            Logger("Sending JSON: " + Json);
+            if (logging)
+            {
+                Logger("Sending JSON: " + Json);
+            }
             try
             {
                 HttpWebRequest httpWebRequest = (HttpWebRequest)WebRequest.Create(new Uri("https://miningmonitor.herokuapp.com/workers/update"));
-                Logger("test httpWeb");
                 httpWebRequest.ContentType = "application/json";
                 httpWebRequest.Method = "PUT";
                 using (StreamWriter streamWriter = new StreamWriter(httpWebRequest.GetRequestStream()))
                  {
-                    Logger("To URL: " + httpWebRequest.Address.ToString());
+                     if (logging)
+                     {
+                         Logger("To URL: " + httpWebRequest.Address.ToString());
+                     }
                     streamWriter.WriteLine(Json);
                     streamWriter.Flush();
                     streamWriter.Close();
@@ -128,19 +125,26 @@ namespace MiningMonitorClientW
                     {
                         HttpWebResponse httpResponse = (HttpWebResponse)httpWebRequest.GetResponse();
                         string wRespStatusCode = httpResponse.StatusCode.ToString();
-                        Logger("Website return code: " + wRespStatusCode);
+                        if (logging)
+                            Logger("Website return code: " + wRespStatusCode);
                     }
                     catch (WebException we)
                     {
                         string wRespStatusCode = ((HttpWebResponse)we.Response).StatusCode.ToString();
-                        Logger(" Exception and Website return code: " + wRespStatusCode);
+                        if (logging)
+                        {
+                            Logger(" Exception and Website return code: " + wRespStatusCode);
+                        }
                     }
                 }
             }
             catch (WebException we2)
             {
                 string GetRequestStreamExp = ((HttpWebResponse)we2.Response).StatusCode.ToString();
-                Logger(" Exception trying to setup http WebRequest.GetRequestStream " + GetRequestStreamExp);
+                if (logging)
+                {
+                    Logger(" Exception trying to setup http WebRequest.GetRequestStream " + GetRequestStreamExp);
+                }
             }
         }
         //Function to parse the string returns from the miner modified slightly from cgminer java api example
