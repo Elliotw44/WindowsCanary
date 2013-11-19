@@ -22,18 +22,17 @@ namespace MiningMonitorClientW
 
         public void update(string user_worker, bool logging)
         {    
-                  //query the miner for summary and gpucount information
-                  String SummaryQuery = QueryMiner("summary", logging);
-                  if(logging)
-                    Logger("Summary Query: \n" + SummaryQuery); 
-                  String gpuNum = FindKey(QueryMiner("gpucount", logging), "Count");
-                  //String PoolQuery = QueryMiner("pools");
-                  int numgpus = Convert.ToInt32(gpuNum);
-                  //Array of strings to hold each gpu query 
-                  String[] gpuQueries = new String[numgpus];
+                 //query the miner for summary and gpucount information
+                 String SummaryQuery = QueryMiner("summary", logging);
+                 if(logging)
+                   Logger("Summary Query: \n" + SummaryQuery); 
+                 String gpuNum = FindKey(QueryMiner("gpucount", logging), "Count");
+                 int numgpus = Convert.ToInt32(gpuNum);
+                 //Array of strings to hold each gpu query 
+                 String[] gpuQueries = new String[numgpus];
                   //add the GPU queries into the array
-                  for (int i = 0; i < numgpus; i++)
-                      gpuQueries[i] = QueryMiner("gpu|" + i, logging);
+                 for (int i = 0; i < numgpus; i++)
+                    gpuQueries[i] = QueryMiner("gpu|" + i, logging);
 
                   //now add information specific to each gpu to a list
                   List<double> gpuList = new List<double>();
@@ -42,7 +41,7 @@ namespace MiningMonitorClientW
                   {
                       gpuList.Add(Convert.ToDouble(FindKey(gpuQueries[i], "Temperature"), US));
                       gpuList.Add(Convert.ToDouble(FindKey(gpuQueries[i], "MHS 5s"), US));
-                  }
+                   }
                   //set all the values that we have gotten from the queries
                   this.wun = user_worker;
                   this.a = Convert.ToInt32(FindKey(SummaryQuery, "Accepted"), US);
@@ -51,6 +50,7 @@ namespace MiningMonitorClientW
                   this.gs = gpuList.ToArray();
                   //create JSON from the workerUpdate object
                   string JSON = JsonConvert.SerializeObject(this);
+                  // for testing string JSON = "{\"worker_user_name\":\"test:worker1\",\"hashrate\":\"1.91\",\"accepted\":\"5995\",\"rejected\":\"153\",\"hw_errors\":\"0\",\"num_gpu\":\"3\",\"gpus\":[\"72.00\",\"0.64\",\"73.00\",\"0.64\",\"74.00\",\"0.63\"]}";
                   //send to website
                   HttpPutRequest(JSON, logging);
         }
@@ -95,55 +95,57 @@ namespace MiningMonitorClientW
         {        
             // Write the string to a file.append mode is enabled so that the log
             // lines get appended to  test.txt than wiping content and writing the log
-
-            System.IO.StreamWriter file = new System.IO.StreamWriter("C:/Users/LitenessEJW/Documents/clientLogs.txt", true);
+            string LogFilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ClientLogs.txt");
+            System.IO.StreamWriter file = new System.IO.StreamWriter(LogFilePath, true);
             file.WriteLine(lines);
-
             file.Close();
         }
         static void HttpPutRequest(string Json, bool logging)
         {
-            if (logging)
-            {
-                Logger("Sending JSON: " + Json);
-            }
             try
             {
-                HttpWebRequest httpWebRequest = (HttpWebRequest)WebRequest.Create(new Uri("https://miningmonitor.herokuapp.com/workers/update"));
-                httpWebRequest.ContentType = "application/json";
-                httpWebRequest.Method = "PUT";
-                using (StreamWriter streamWriter = new StreamWriter(httpWebRequest.GetRequestStream()))
-                 {
-                     if (logging)
-                     {
-                         Logger("To URL: " + httpWebRequest.Address.ToString());
-                     }
-                    streamWriter.WriteLine(Json);
-                    streamWriter.Flush();
-                    streamWriter.Close();
-                    try
+                HttpWebRequest Request = (HttpWebRequest)WebRequest.Create("https://miningmonitor.herokuapp.com/workers/update");
+                Request.ContentType = "application/json";
+                Request.Method = "PUT";
+                Request.Timeout = 120000; //not sure if correct
+                byte[] bytes = Encoding.UTF8.GetBytes(Json);
+                Request.ContentLength = bytes.Length;
+
+                Stream dataStream = Request.GetRequestStream();
+                dataStream.Write(bytes, 0, bytes.Length);
+                dataStream.Close();
+                HttpWebResponse response = (HttpWebResponse)Request.GetResponse();
+                Stream RdataStream = response.GetResponseStream();
+                StreamReader reader = new StreamReader(RdataStream);
+                if (logging)
+                {
+                    Logger("Sending JSON: " + Json);
+                    Logger("To URL: " + Request.ToString());
+                    Logger("Status: " + ((HttpWebResponse)response).StatusDescription);
+                    Logger("Response: " + reader.ReadToEnd());
+                }
+                reader.Close();
+                RdataStream.Close();
+                response.Close();
+            }
+            catch (WebException we)
+            {
+                if (logging)
+                {
+                    Logger("Web Expection Catch: " + we.ToString());
+                    WebExceptionStatus status = we.Status;
+                    if (status == WebExceptionStatus.ProtocolError)
                     {
-                        HttpWebResponse httpResponse = (HttpWebResponse)httpWebRequest.GetResponse();
-                        string wRespStatusCode = httpResponse.StatusCode.ToString();
-                        if (logging)
-                            Logger("Website return code: " + wRespStatusCode);
-                    }
-                    catch (WebException we)
-                    {
-                        string wRespStatusCode = ((HttpWebResponse)we.Response).StatusCode.ToString();
-                        if (logging)
-                        {
-                            Logger(" Exception and Website return code: " + wRespStatusCode);
-                        }
+                        HttpWebResponse http = (HttpWebResponse)we.Response;
+                        Logger("The Server returned protocal Error: " + (int)http.StatusCode + " - " + http.StatusCode);
                     }
                 }
             }
-            catch (WebException we2)
+            catch (Exception ex)
             {
-                string GetRequestStreamExp = ((HttpWebResponse)we2.Response).StatusCode.ToString();
                 if (logging)
                 {
-                    Logger(" Exception trying to setup http WebRequest.GetRequestStream " + GetRequestStreamExp);
+                    Logger("Expection: " + ex.ToString());
                 }
             }
         }

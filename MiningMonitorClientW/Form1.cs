@@ -13,8 +13,9 @@ namespace MiningMonitorClientW
 {
     public partial class form1 : Form
     {
+        public static bool running = false;
         private static System.Timers.Timer timer1;
-        static public bool running = false;
+     
         public form1()
         {
             InitializeComponent();
@@ -24,14 +25,13 @@ namespace MiningMonitorClientW
         {
             if (textBox1.Text.Trim().Length != 0 && textBox2.Text.Trim().Length != 0 && !running)
             {
-                timer1 = new System.Timers.Timer(210000);
+                timer1 = new System.Timers.Timer(180000);
                 timer1.Elapsed += new  System.Timers.ElapsedEventHandler(onTimerEvent);
                 timer1.Start();
                 this.button1.Text = "Stop Monitoring";
                 running = true;
                 this.progressBar1.Style = ProgressBarStyle.Marquee;
                 this.progressBar1.MarqueeAnimationSpeed = 30;
-                
             }
             else if (running)
             {
@@ -46,19 +46,23 @@ namespace MiningMonitorClientW
                 textBox2.Text = "Enter your username from the website here please";
             }
         }
-         //run the worker job every 2 minutes
+         //run the worker job every 3 minutes
         private void onTimerEvent(object sender, EventArgs e)
         {
-            minerQuery.RunWorkerAsync();
+                minerQuery.RunWorkerAsync();
         }
 
         private void backgroundWorker1_DoWork(object sender, DoWorkEventArgs e)
         {
             string user_worker = textBox2.Text.Trim().ToLower() + ":" + textBox1.Text.Trim().ToLower();
             bool logging = false;
-            if (this.radioButton1.Checked)
+            if (this.checkBox1.Checked)
             {
                 logging = true;
+            }
+            else
+            {
+                logging = false;
             }
             WorkerUpdate workerUpdate = new WorkerUpdate();
             workerUpdate.update(user_worker, logging);
