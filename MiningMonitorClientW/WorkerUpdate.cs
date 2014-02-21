@@ -9,6 +9,7 @@ using Newtonsoft.Json.Utilities;
 using Newtonsoft.Json;
 using System.IO;
 using System.Globalization;
+using System.Text.RegularExpressions;
 
 namespace MiningMonitorClientW
 {
@@ -19,13 +20,13 @@ namespace MiningMonitorClientW
         public int r { get; set; }
         public int he { get; set; }
         public double[] gs { get; set; }
+        public string p { get; set; }
+        public int po { get; set; }
 
         public void update(string user_worker, bool logging)
         {    
                  //query the miner for summary and gpucount information
-                 String SummaryQuery = QueryMiner("summary", logging);
-                 if(logging)
-                   Logger("Summary Query: \n" + SummaryQuery); 
+                 String SummaryQuery = QueryMiner("summary", logging); 
                  String gpuNum = FindKey(QueryMiner("gpucount", logging), "Count");
                  int numgpus = Convert.ToInt32(gpuNum);
                  //Array of strings to hold each gpu query 
@@ -41,16 +42,27 @@ namespace MiningMonitorClientW
                   {
                       gpuList.Add(Convert.ToDouble(FindKey(gpuQueries[i], "Temperature"), US));
                       gpuList.Add(Convert.ToDouble(FindKey(gpuQueries[i], "MHS 5s"), US));
-                   }
+                  }
+                  //Do all the pool work
+                  String  PoolQuery = QueryMiner("pools", logging);
+                  String CurPool = FindKey(PoolQuery, "URL");
+                  String PoolOnline = FindKey(PoolQuery, "Status");
+                  int pa = PoolOnline == "Alive"? 1 : 0;
+                  Regex regex =  new Regex("//(\\w+).com");
+                  Match match = regex.Match(CurPool);
+                  CurPool = match.Success? match.Groups[1].Value : CurPool;
                   //set all the values that we have gotten from the queries
                   this.wun = user_worker;
                   this.a = Convert.ToInt32(FindKey(SummaryQuery, "Accepted"), US);
                   this.r = Convert.ToInt32(FindKey(SummaryQuery, "Rejected"), US);
                   this.he = Convert.ToInt32(FindKey(SummaryQuery, "Hardware Errors"), US);
                   this.gs = gpuList.ToArray();
+                  this.p = CurPool;
+                  this.po = pa;
+                  
                   //create JSON from the workerUpdate object
                   string JSON = JsonConvert.SerializeObject(this);
-                  // for testing string JSON = "{\"worker_user_name\":\"test:worker1\",\"hashrate\":\"1.91\",\"accepted\":\"5995\",\"rejected\":\"153\",\"hw_errors\":\"0\",\"num_gpu\":\"3\",\"gpus\":[\"72.00\",\"0.64\",\"73.00\",\"0.64\",\"74.00\",\"0.63\"]}";
+                  // for testing string JSON = "{\"wun\":\"1:worker1\",\"h\":\"1.91\",\"a\":\"5995\",\"r\":\"153\",\"he\":\"0\",\"gpus\":[\"72.00\",\"0.64\",\"73.00\",\"0.64\",\"74.00\",\"0.63\"]}";
                   //send to website
                   HttpPutRequest(JSON, logging);
         }
@@ -79,6 +91,8 @@ namespace MiningMonitorClientW
                 String SummaryJson = new String(chars);
                 sender.Shutdown(SocketShutdown.Both);
                 sender.Close();
+                if(logging)
+                    Logger("Query " + command + ": "  + SummaryJson + System.Environment.NewLine);
                 return SummaryJson;
             }
             catch (Exception ex)
@@ -104,7 +118,7 @@ namespace MiningMonitorClientW
         {
             try
             {
-                HttpWebRequest Request = (HttpWebRequest)WebRequest.Create("https://miningmonitor.herokuapp.com/workers/update");
+                HttpWebRequest Request = (HttpWebRequest)WebRequest.Create("https://cryptocanary.herokuapp.com/workers/update");
                 Request.ContentType = "application/json";
                 Request.Method = "PUT";
                 Request.Timeout = 120000; //not sure if correct
@@ -120,7 +134,7 @@ namespace MiningMonitorClientW
                 if (logging)
                 {
                     Logger("Sending JSON: " + Json);
-                    Logger("To URL: " + Request.ToString());
+                    Logger("To URL: " + Request.Address);
                     Logger("Status: " + ((HttpWebResponse)response).StatusDescription);
                     Logger("Response: " + reader.ReadToEnd());
                 }
